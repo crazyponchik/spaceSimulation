@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Solar System Visualization</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+    .controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 1;
+    }
+    .controls > * {
+      display: block;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="controls">
+    <label for="camera-sensitivity">Camera Sensitivity:</label>
+    <input type="range" id="camera-sensitivity" min="0.001" max="0.01" step="0.001" value="0.005"> 
+    <label for="move-speed">Movement Speed:</label>
+    <input type="range" id="move-speed" min="0.1" max="1" step="0.1" value="0.5">
+    <label for="sun-brightness">Sun Brightness:</label>
+    <input type="range" id="sun-brightness" min="1" max="5" step="0.1" value="2">
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Create the scene, camera, and renderer
+    const scene = new THREE.Scene();
+		// What da fuck does this thing
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Add a point light to simulate the Sun's light
+    const sunLight = new THREE.PointLight(0xffffff, 2, 100);
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
+
+    // Add a world light to make the scene less dark
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+
+    // Create the Sun
+    const sunGeometry = new THREE.SphereGeometry(1.5, 32, 32);
+    const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    scene.add(sun);
+
+    // Create the Earth
+    const earthGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+    const earthMaterial = new THREE.MeshStandardMaterial({
+      map: new THREE.TextureLoader().load('https://threejs.org/examples/textures/land_ocean_ice_cloud_2048.jpg')
+    });
+    const earth = new THREE.Mesh(earthGeometry, earthMaterial);
+    scene.add(earth);
+
+    // Create the Moon
+    const moonGeometry = new THREE.SphereGeometry(0.15, 32, 32);
+    const moonMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+    const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    scene.add(moon);
+
+    // Create a star field
+    const starGeometry = new THREE.BufferGeometry();
+    const starCount = 10000;
+    const starPositions = new Float32Array(starCount * 3);
+
+    for (let i = 0; i < starCount; i++) {
+      starPositions[i * 3] = (Math.random() - 0.5) * 2000; // x
+      starPositions[i * 3 + 1] = (Math.random() - 0.5) * 2000; // y
+      starPositions[i * 3 + 2] = (Math.random() - 0.5) * 2000; // z
+    }
+
+    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.1 });
+    const starField = new THREE.Points(starGeometry, starMaterial);
+    scene.add(starField);
+
+    // Position the camera
+    camera.position.set(0, 1, 10);
+    camera.rotation.order = 'YXZ';
+
+    // Animation variables for Earth and Moon
+    let earthOrbitRadius = 5;
+    let moonOrbitRadius = 1;
+
+    // Camera control variables
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    let sensitivity = 0.005;
+    let moveSpeed = 0.5;
+    let keyPressed = {};
+
+    // Animation function
+    function animate() {
+      requestAnimationFrame(animate);
+      const time = Date.now() * 0.001;
+
+      // Rotate Earth around the Sun
+      earth.position.x = Math.cos(time * 0.5) * earthOrbitRadius;
+      earth.position.z = Math.sin(time * 0.5) * earthOrbitRadius;
+
+      // Spin the Earth
+      earth.rotation.y += 0.01;
+
+      // Rotate Moon around the Earth
+      moon.position.x = earth.position.x + Math.cos(time * 2) * moonOrbitRadius;
+      moon.position.z = earth.position.z + Math.sin(time * 2) * moonOrbitRadius;
+
+      // Update camera position based on keyboard input
+      let direction = new THREE.Vector3();
+      if (keyPressed['w']) direction.z -= moveSpeed;
+      if (keyPressed['s']) direction.z += moveSpeed;
+      if (keyPressed['a']) direction.x -= moveSpeed;
+      if (keyPressed['d']) direction.x += moveSpeed;
+      if (keyPressed['x']) direction.y += moveSpeed;
+      if (keyPressed['c']) direction.y -= moveSpeed;
+
+      direction.applyQuaternion(camera.quaternion);
+      camera.position.add(direction);
+
+      // Render the scene
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Add mouse controls
+    document.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      previousMousePosition = { x: e.clientX, y: e.clientY };
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        const deltaMove = {
+          x: e.clientX - previousMousePosition.x,
+          y: e.clientY - previousMousePosition.y
+        };
+
+        previousMousePosition = {
+          x: e.clientX,
+          y: e.clientY
+        };
+
+        camera.rotation.y -= deltaMove.x * sensitivity;
+        camera.rotation.x -= deltaMove.y * sensitivity;
+        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+      }
+    });
+
+    // Add keyboard controls for movement
+    document.addEventListener('keydown', (e) => {
+      keyPressed[e.key.toLowerCase()] = true;
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keyPressed[e.key.toLowerCase()] = false;
+    });
+
+    // Update controls
+    document.getElementById('camera-sensitivity').addEventListener('input', (e) => {
+      sensitivity = parseFloat(e.target.value);
+    });
+
+    document.getElementById('move-speed').addEventListener('input', (e) => {
+      moveSpeed = parseFloat(e.target.value);
+    });
+
+    document.getElementById('sun-brightness').addEventListener('input', (e) => {
+      sunLight.intensity = parseFloat(e.target.value);
+    });
+
+    // Adjust camera and renderer when the window is resized
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
